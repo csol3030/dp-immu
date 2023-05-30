@@ -16,7 +16,7 @@ default_args = {
 }
 
 ENV_ID = "DEV"
-DAG_ID = "af_download_sftp_to_adls"
+DAG_ID = "af_sftp_to_adls"
 
 def download_from_sftp(**context):
     import sys
@@ -32,9 +32,9 @@ with DAG(
     catchup=False,
     params={
         "state_code": Param(default='VA', type=["string"]),
-        "year": Param(default=2023, type=["integer"]),
-        "month": Param(default=5 , type=["integer"]),
-        "customer_id": Param(default=125, type=["integer"])
+        "year": Param(default=2023, type=["integer", "string"]),
+        "month": Param(default=5 , type=["integer", "string"]),
+        "customer_id": Param(default=125, type=["integer", "string"])
 
     },
 ) as dag:

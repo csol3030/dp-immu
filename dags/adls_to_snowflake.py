@@ -43,7 +43,7 @@ with DAG(
     params={
         "customer_id": Param(default=125, type=["integer", "string"], min=1, max=255),
         "container_name": Param(default="cont-datalink-dp-shared", type=["string"]),
-        "root_folder": Param(default="LANDING", type=["string"]),
+        "root_folder": Param(default="INPUT", type=["string"]),
         "database": Param(default="DEV_OPS_DB", type=["string"]),
         "schema": Param(default="CONFIG", type=["string"]),
         "run_failed": Param(default=True),
