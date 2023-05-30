@@ -87,7 +87,6 @@ def get_azure_connection():
     connection = (blob_service_client, container_client, account_name, sas)
     return connection
 
-
 def download_blob_container(customer_id, state, year, month):
     try:
         azure_connection = get_azure_connection()

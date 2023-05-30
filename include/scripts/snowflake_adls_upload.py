@@ -17,6 +17,7 @@ SCHEMA = "IMMUNIZATION"
 year = 2013
 month = 5
 customer_id = 125
+state_code = "VA"
 
 def get_kv_secret(secret_name):
     # connect to Azure Key vault and returns the specified secret value
@@ -255,24 +256,21 @@ def update_validated_df(df,source,valid_values,default):
     df = df.withColumn(source, F.when(F.col(source).isin(valid_list), F.col(source)).otherwise(default))
     return df
 
-
-def process(context):
-    try:
-        state_code = context['params']['state_code']
+def set_context_param(context):
         
-        global year, month, customer_id
+        global year, month, customer_id,state_code
+        state_code = context['params']['state_code']
         year = context['params']['year']
         month = context['params']['month']
         customer_id = context['params']['customer_id']
 
+def process(context):
+    try:
+
+        set_context_param(context)
         state_reg_id = get_state_config(state_code)
-        
         get_filed_config_for_state(state_reg_id)
 
-        #  SFTP to ADLS flow
-        # path_info = file_transfer.get_sftp_download_files()
-        # upload_from = file_encr_decr.process_folder_file_decryption(path_info)
-        # file_encr_decr.upload_files_to_blob_storage(upload_from)
     except Exception as e:
         print(e)
     finally:
@@ -281,16 +279,12 @@ def process(context):
 
 def download(context):
     try:
-        state_code = context['params']['state_code']
-        global year, month, customer_id
-        year = context['params']['year']
-        month = context['params']['month']
-        customer_id = context['params']['customer_id']
-
+        
+        set_context_param(context)
         get_state_config(state_code)
 
         # SFTP to ADLS flow customer_id, file_format_config["state"], year, month
-        path_info = file_transfer.get_sftp_download_files()
+        path_info = file_transfer.get_sftp_download_files(customer_id, file_format_config["state"], year, month)
         upload_from = file_encr_decr.process_folder_file_decryption(path_info)
         file_encr_decr.upload_files_to_blob_storage(upload_from)
     
