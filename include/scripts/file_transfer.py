@@ -67,13 +67,13 @@ def get_adls_encrypted_files(pathinfo):
     except Exception as e:
         print(e)
 
-def get_sftp_download_files():
+def get_sftp_download_files(customer_id, state, year, month):
     try:
         print("*************downloading started***************")
-        sftppath="/INPUT/125/VIRGINIA/2023/23"
+        sftppath=f"""/INPUT/{customer_id}/{state}/{year}/{month}"""
         # downloadpath='./sftp_download_files'
 
-        download_directory = f"""INPUT/125/VIRGINIA/{currentYear}/{currentMonth}"""
+        download_directory = f"""INPUT/{customer_id}/{state}/{year}/{month}"""
         local_download_folder = os.path.join('./sftp_download_files', download_directory)
         os.makedirs(local_download_folder, exist_ok=True)
         print("local_download_folder : " + local_download_folder)
@@ -93,10 +93,3 @@ def get_sftp_download_files():
         return path_info
     except Exception as e:
          print(e)
-
-# get_sftp_download_files()
-
-        # sftppath= f"""/INPUT/{customer_id}/{state}/{year}/{month}"""
-        # # downloadpath='./sftp_download_files'
-
-        # download_directory = f"""INPUT/{customer_id}/{state}/{year}/{month}"""
