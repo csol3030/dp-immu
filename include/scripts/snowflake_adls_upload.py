@@ -8,8 +8,8 @@ from datetime import datetime
 import pandas as pd
 import file_encr_decr
 import file_transfer
+import constant
 
-KEYVAULT_URI = "https://kv-datalink-dp-pilot.vault.azure.net"
 KEYVAULT_SNOWFLAKE_SECRET = "SnowflakeImmunizationSecret"
 DATABASE = "DEV_IMMUNIZATION_DB"
 SCHEMA = "IMMUNIZATION"
@@ -22,7 +22,7 @@ state_code = "VA"
 def get_kv_secret(secret_name):
     # connect to Azure Key vault and returns the specified secret value
     az_credential = AzureCliCredential()
-    kv_client = SecretClient(vault_url=KEYVAULT_URI, credential=az_credential)
+    kv_client = SecretClient(vault_url=constant.KEYVAULT_URI, credential=az_credential)
     fetched_secret = kv_client.get_secret(secret_name)
     return fetched_secret.value
 
@@ -99,12 +99,12 @@ def generate_member_df(field_config_df):
 
     # ADLS to sftp flow
     print("ADLS to sftp flow started")
-    path_info = file_encr_decr.download_blob_container(customer_id, file_format_config["state"], year, month)
+    path_info = file_transfer.download_blob_container(customer_id, file_format_config["state"], year, month)
     folder_encryption = file_encr_decr.process_folder_files_encryption(path_info)
 
     local_path, upload_path = folder_encryption
     file_transfer.get_adls_encrypted_files(folder_encryption)
-    file_encr_decr.remove_all_files_from_path(local_path)
+    file_transfer.remove_all_files_from_path(local_path)
 
 def prepare_select_query(field_config_df):
     source_fields = field_config_df["SOURCE_FIELD"]
@@ -285,8 +285,9 @@ def download(context):
 
         # SFTP to ADLS flow customer_id, file_format_config["state"], year, month
         path_info = file_transfer.get_sftp_download_files(customer_id, file_format_config["state"], year, month)
+        print(path_info)
         upload_from = file_encr_decr.process_folder_file_decryption(path_info)
-        file_encr_decr.upload_files_to_blob_storage(upload_from)
+        file_transfer.upload_files_to_blob_storage(upload_from)
     
     except Exception as e:
         print(e)

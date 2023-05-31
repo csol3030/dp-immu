@@ -11,7 +11,7 @@ import fnmatch
 import re
 import ntpath
 import json
-import os
+import constant
 
 
 # Snowflake configurations
@@ -30,8 +30,6 @@ FILE_INGESTION_DETAILS = 'FILE_INGESTION_DETAILS'
 ARCHIVE_FOLDER = 'ARCHIVE'
 ERROR_FOLDER = 'ERROR'
 
-# Key vault configuration
-KEYVAULT_URI = 'https://kv-datalink-dp-pilot.vault.azure.net'
 
 # CCD configurations
 CCD_FILE_EXT = 'XML'
@@ -42,7 +40,7 @@ CCD_META_DATA_COLUMNS = ['FILENAME']
 def get_kv_secret(secret_name):
     # connect to Azure Key vault and returns the specified secret value
     az_credential = AzureCliCredential()
-    kv_client = SecretClient(vault_url=KEYVAULT_URI, credential=az_credential)
+    kv_client = SecretClient(vault_url=constant.KEYVAULT_URI, credential=az_credential)
     fetched_secret = kv_client.get_secret(secret_name)
     return fetched_secret.value
 
@@ -593,9 +591,9 @@ def handle_blob_list(file_dict, blob_i, file_columns, created, table_columns, co
             snowflake_session, file_dict['file_details_id'],
             blob_i, response, handle_schema_drift, schema_drift_columns,
             file_name, load_timestamp)
-        # if CCD_FILE_EXT not in file_dict['file_wild_card_ext'].upper():
-        #     error_found = update_bronze_to_sliver_details(snowflake_session, file_dict,
-        #                                               file_name, load_timestamp)
+        if CCD_FILE_EXT not in file_dict['file_wild_card_ext'].upper():
+            error_found = update_bronze_to_sliver_details(snowflake_session, file_dict,
+                                                      file_name, load_timestamp)
         # move_blob(azure_connection, blob_i, error_found,  context)
     except Exception as e:
             if load_timestamp:

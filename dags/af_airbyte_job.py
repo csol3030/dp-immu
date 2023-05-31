@@ -18,8 +18,8 @@ from airflow.providers.airbyte.sensors.airbyte import AirbyteJobSensor
 from airflow.providers.airbyte.hooks.airbyte import AirbyteHook
 from azure.identity import AzureCliCredential
 from azure.keyvault.secrets import SecretClient
+import constant
 
-KEYVAULT_URI = "https://kv-datalink-dp-pilot.vault.azure.net"
 KEYVAULT_AIRBYTE_SECRET = "ImmunizationAirbyteSecret"
 KEYVAULT_SNOWFLAKE_SECRET = "ImmunizationSnowflakeSecret"
 
@@ -41,7 +41,7 @@ default_args = {
 session = settings.Session()
 
 az_credential = AzureCliCredential()
-kv_client = SecretClient(vault_url=KEYVAULT_URI, credential=az_credential)
+kv_client = SecretClient(vault_url=constant.KEYVAULT_URI, credential=az_credential)
 
 
 @provide_session
