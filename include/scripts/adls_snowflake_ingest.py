@@ -11,7 +11,7 @@ import fnmatch
 import re
 import ntpath
 import json
-
+import constant
 
 # Snowflake configurations
 DATABASE = "DEV_IMMUNIZATION_DB"
@@ -29,8 +29,6 @@ FILE_INGESTION_DETAILS = 'FILE_INGESTION_DETAILS'
 ARCHIVE_FOLDER = 'ARCHIVE'
 ERROR_FOLDER = 'ERROR'
 
-# Key vault configuration
-KEYVAULT_URI = 'https://kv-datalink-dp-pilot.vault.azure.net'
 
 # CCD configurations
 CCD_FILE_EXT = 'XML'
@@ -41,7 +39,7 @@ CCD_META_DATA_COLUMNS = ['FILENAME']
 def get_kv_secret(secret_name):
     # connect to Azure Key vault and returns the specified secret value
     az_credential = AzureCliCredential()
-    kv_client = SecretClient(vault_url=KEYVAULT_URI, credential=az_credential)
+    kv_client = SecretClient(vault_url=constant.KEYVAULT_URI, credential=az_credential)
     fetched_secret = kv_client.get_secret(secret_name)
     return fetched_secret.value
 
