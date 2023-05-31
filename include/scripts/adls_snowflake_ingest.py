@@ -11,6 +11,7 @@ import fnmatch
 import re
 import ntpath
 import json
+import os
 
 
 # Snowflake configurations
@@ -248,8 +249,12 @@ def pattern_matching(azure_session, file_dict, context):
     file_name_pattern = file_dict["file_name_pattern"]
     customer_id = context["params"]["customer_id"]
     root_folder = context["params"]["root_folder"]
+    state = file_dict.get("state")
+    lookup_folder = f"{root_folder}/{str(customer_id)}"
+    if state:
+        lookup_folder+= f"/{state}"
     blob_list = []
-    for blob_i in azure_session.list_blobs(name_starts_with=f"{root_folder}/{str(customer_id)}"):
+    for blob_i in azure_session.list_blobs(name_starts_with=lookup_folder):
         file_name = blob_i.name.lower()
         file_name_pattern = file_name_pattern.lower()
         if fnmatch.fnmatch(file_name, file_dict['file_wild_card_ext'].lower()):
@@ -508,7 +513,9 @@ def process(context):
             try:
                 file_dict = {}
                 file_dict['file_details_id'] = int(df_file_details['FILE_DETAILS_ID'][ind])
-                file_dict['customer_id'] = int(df_file_details['STATE_REG_ID'][ind])
+                file_dict['customer_id'] = int(df_file_details['CUSTOMER_ID'][ind])
+                file_dict['state_reg_id'] = int(df_file_details['STATE_REG_ID'][ind])
+                file_dict['state'] = int(df_file_details['STATE'][ind])
                 file_dict['file_name_pattern'] = df_file_details['INBOUND_FILE_NAME_PATTERN'][ind]
                 file_dict['file_wild_card_ext'] = df_file_details['FILE_EXTENSION'][ind]
                 file_dict['field_delimiter'] = df_file_details['FIELD_DELIMITER'][ind]
