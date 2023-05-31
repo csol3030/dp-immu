@@ -6,7 +6,7 @@ from os.path import isfile, join
 import json
 from azure.identity import AzureCliCredential
 from azure.keyvault.secrets import SecretClient
-
+import shutil
 from datetime import datetime
 
 import json
@@ -39,19 +39,15 @@ cnopts.hostkeys = None
 currentMonth = datetime.now().month
 currentYear = datetime.now().year
 
-def get_adls_encrypted_files(pathinfo):
+def upload_files_to_sftp(pathinfo):
     try:
-        print("******* get_adls_encrypted_files *******")
+        print("******* upload_files_to_sftp  start *******")
         inputpath,outputpath = pathinfo
         # inputpath = "./adsl_encrypted_files/OUTPUT/125/Virginia/2023/5"
         # outputpath = "/OUTPUT/125/Virginia/2023/5"
-        print(inputpath)
-        print(outputpath)
         outputdir=outputpath.split('/')
         # outputdir=outputdir[1:]
         onlyfiles = [f for f in listdir(inputpath) if isfile(join(inputpath, f))]
-        print(inputpath)
-        print(onlyfiles)
         directory=''
         with pysftp.Connection(host, username=user_name, password=sftp_password, cnopts=cnopts) as sftp:
             for i in outputdir:
@@ -66,14 +62,14 @@ def get_adls_encrypted_files(pathinfo):
                 with sftp.cd(directory):
                     sftp.put(ippath)
         sftp.close()
-        print("******* End get_adls_encrypted_files *******")
+        print("******* upload_files_to_sftp end *******")
 
     except Exception as e:
         print(e)
 
-def get_sftp_download_files(customer_id, state, year, month):
+def download_files_from_sftp(customer_id, state, year, month):
     try:
-        print("*************downloading started***************")
+        print("************* download_files_from_sftp started ***************")
         sftppath=f"""/INPUT/{customer_id}/{state}/{year}/{month}"""
         # downloadpath='./sftp_download_files'
 
@@ -93,7 +89,7 @@ def get_sftp_download_files(customer_id, state, year, month):
         sftp.close()
         path_info = (local_download_folder, download_directory)
         print(path_info)
-        print("************downloaded**************")
+        print("************ download_files_from_sftp end **************")
         return path_info
     except Exception as e:
          print(e)
@@ -113,6 +109,7 @@ def get_azure_connection():
 
 def download_blob_container(customer_id, state, year, month):
     try:
+        print("******** download_blob_container start ********")
         azure_connection = get_azure_connection()
         blob_service_client, azure_session, account_name, sas = azure_connection
 
@@ -126,6 +123,7 @@ def download_blob_container(customer_id, state, year, month):
             download_file_path = os.path.join(local_download_folder, os.path.basename(blob.name).split('/')[-1]) 
             with open(file=download_file_path, mode="wb") as download_file:
                 download_file.write(azure_session.download_blob(blob.name).readall())
+        print("******** download_blob_container end ********")
         path_info = (local_download_folder,download_directory)
         return path_info
     except Exception as e:
@@ -133,6 +131,7 @@ def download_blob_container(customer_id, state, year, month):
 
 def upload_files_to_blob_storage(upload_directory):
     try:
+        print("******** upload_files_to_blob_storage start ********")
         azure_connection = get_azure_connection()
         blob_service_client, azure_session, account_name, sas = azure_connection
 
@@ -149,12 +148,15 @@ def upload_files_to_blob_storage(upload_directory):
             remove_all_files_from_path(output_folder)
             # cleaup download folder   
             remove_all_files_from_path(input_upload)
+            print("******** upload_files_to_blob_storage end ********")
         except Exception as e:
             print("Error at upload_files_to_blob_storage: " + str(e))
     except Exception as e:
             print("Connection error: " + str(e))
 
 def remove_all_files_from_path(folder):
+    print("***************** remove_all_files_from_path start *****************")
+    print(folder)
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
         try:
@@ -162,5 +164,6 @@ def remove_all_files_from_path(folder):
                 os.unlink(file_path)
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
+            print("***************** remove_all_files_from_path end *****************")
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))

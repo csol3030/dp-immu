@@ -47,7 +47,6 @@ file_format_config = {}
 def get_state_config(code):
 
     df = session.table(f"{DATABASE}.{SCHEMA}.CONFIG_STATE").filter(F.col("STATE_CODE") == code)
-
     first_object = df.first()
 
     global file_format_config
@@ -66,6 +65,9 @@ def get_state_config(code):
         "source_db": first_object["SOURCE_DB"],
         "source_table": first_object["SOURCE_TABLE"],
         "source_schema": first_object["SOURCE_SCHEMA"],
+        "state_has_encryption": first_object["HAS_ENCRYPTION"],
+        "private_key": first_object["PUBLIC_KEY_SECRETE"],
+        "publick_key": first_object["PRIVATE_KEY_SECRETE"],
         "state": first_object["STATE"],
         "state_code": code
     }
@@ -103,7 +105,7 @@ def generate_member_df(field_config_df):
     folder_encryption = file_encr_decr.process_folder_files_encryption(path_info)
 
     local_path, upload_path = folder_encryption
-    file_transfer.get_adls_encrypted_files(folder_encryption)
+    file_transfer.upload_files_to_sftp(folder_encryption)
     file_transfer.remove_all_files_from_path(local_path)
 
 def prepare_select_query(field_config_df):
@@ -284,7 +286,7 @@ def download(context):
         get_state_config(state_code)
 
         # SFTP to ADLS flow customer_id, file_format_config["state"], year, month
-        path_info = file_transfer.get_sftp_download_files(customer_id, file_format_config["state"], year, month)
+        path_info = file_transfer.download_files_from_sftp(customer_id, file_format_config["state"], year, month)
         print(path_info)
         upload_from = file_encr_decr.process_folder_file_decryption(path_info)
         file_transfer.upload_files_to_blob_storage(upload_from)

@@ -105,7 +105,7 @@ def file_decrypt(path_encrypted_file, path_decrypted_file, key_private):
     
 def process_folder_files_encryption(inputpath):
     try:
-        print("process_folder_files_encryption start")
+        print("****** process_folder_files_encryption start ******")
         local_download_folder, download_directory = inputpath
         # print("process_folder_files_encryption")
         # print(inputpath)
@@ -117,8 +117,6 @@ def process_folder_files_encryption(inputpath):
         for file in onlyfiles:
             file_encrypt(os.path.join(local_download_folder, file), os.path.join(output_encrypted_files, file.replace(".txt", ".pgp")), key_public)
 
-        print("***************** remove_all_files_from_path start *****************")
-        print(local_download_folder)
         remove_all_files_from_path(local_download_folder)
         path_info = (output_encrypted_files, download_directory)
         return path_info
@@ -126,7 +124,7 @@ def process_folder_files_encryption(inputpath):
         print("Error at process_folder_files_encryption: " + str(e))
 
 def process_folder_file_decryption(path_info):
-    try: 
+    try:
         # inputpath = "./sftp_download_files"
         # outputpath = "./sftp_decrypted_files"
         local_download_folder, download_directory = path_info
@@ -166,6 +164,8 @@ def process_folder_file_decryption(path_info):
 #             print("Connection error: " + str(e))
 
 def remove_all_files_from_path(folder):
+    print("***************** remove_all_files_from_path start *****************")
+    print(folder)
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
         try:
@@ -173,6 +173,7 @@ def remove_all_files_from_path(folder):
                 os.unlink(file_path)
             elif os.path.isdir(file_path):
                 shutil.rmtree(file_path)
+            print("***************** remove_all_files_from_path end *****************")
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))
 
