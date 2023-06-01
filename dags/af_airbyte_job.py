@@ -18,7 +18,7 @@ from airflow.providers.airbyte.sensors.airbyte import AirbyteJobSensor
 from airflow.providers.airbyte.hooks.airbyte import AirbyteHook
 from azure.identity import AzureCliCredential
 from azure.keyvault.secrets import SecretClient
-import constant
+from include.scripts import constant
 
 KEYVAULT_AIRBYTE_SECRET = "ImmunizationAirbyteSecret"
 KEYVAULT_SNOWFLAKE_SECRET = "ImmunizationSnowflakeSecret"
