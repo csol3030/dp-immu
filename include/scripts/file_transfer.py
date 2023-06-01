@@ -76,8 +76,8 @@ def download_files_from_sftp(customer_id, state, year, month):
         download_directory = f"""INPUT/{customer_id}/{state}/{year}/{month}"""
         local_download_folder = os.path.join('./sftp_download_files', download_directory)
         os.makedirs(local_download_folder, exist_ok=True)
+        
         print("local_download_folder : " + local_download_folder)
-
         with pysftp.Connection(host, username=user_name, password=sftp_password, cnopts=cnopts) as sftp:
              inputfiles=sftp.listdir(sftppath)
              for file in inputfiles:
@@ -88,7 +88,6 @@ def download_files_from_sftp(customer_id, state, year, month):
                     sftp.get(filepath,local_download_folder)
         sftp.close()
         path_info = (local_download_folder, download_directory)
-        print(path_info)
         print("************ download_files_from_sftp end **************")
         return path_info
     except Exception as e:
@@ -129,15 +128,15 @@ def download_blob_container(customer_id, state, year, month):
     except Exception as e:
             print(e)
 
-def upload_files_to_blob_storage(upload_directory):
+def upload_files_to_blob_storage(upload_directory, state_has_encryption):
     try:
         print("******** upload_files_to_blob_storage start ********")
         azure_connection = get_azure_connection()
         blob_service_client, azure_session, account_name, sas = azure_connection
 
         try:
-            input_upload = os.path.join('./sftp_decrypted_files', upload_directory)
-            output_folder = os.path.join('./sftp_download_files', upload_directory)
+            input_upload = os.path.join('./sftp_decrypted_files', upload_directory) if state_has_encryption == True else os.path.join('./sftp_download_files', upload_directory)
+            print(str(state_has_encryption) +" ******** upload_files_to_blob_storage from ******** " + input_upload)
             # inputpath = "./sftp_decrypted_files"
             onlyfiles = [f for f in listdir(input_upload) if isfile(join(input_upload, f))]
             for file in onlyfiles:
@@ -145,8 +144,6 @@ def upload_files_to_blob_storage(upload_directory):
                     azure_session.upload_blob(data=data, name= os.path.join(upload_directory,file),overwrite=True)
                                 
             # cleaup decrypted files folder
-            remove_all_files_from_path(output_folder)
-            # cleaup download folder   
             remove_all_files_from_path(input_upload)
             print("******** upload_files_to_blob_storage end ********")
         except Exception as e:

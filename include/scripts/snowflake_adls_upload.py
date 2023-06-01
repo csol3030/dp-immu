@@ -102,11 +102,20 @@ def generate_member_df(field_config_df):
     # ADLS to sftp flow
     print("ADLS to sftp flow started")
     path_info = file_transfer.download_blob_container(customer_id, file_format_config["state"], year, month)
-    folder_encryption = file_encr_decr.process_folder_files_encryption(path_info)
 
-    local_path, upload_path = folder_encryption
-    file_transfer.upload_files_to_sftp(folder_encryption)
-    file_transfer.remove_all_files_from_path(local_path)
+    if bool(file_format_config["state_has_encryption"]) == True:
+        print('state_has_encryption')
+        folder_encryption = file_encr_decr.process_folder_files_encryption(path_info)
+        local_path, upload_path = folder_encryption
+        file_transfer.upload_files_to_sftp(folder_encryption)
+        file_transfer.remove_all_files_from_path(local_path)
+    else:
+        print('Not have state_has_encryption')
+        local_path, directory_structure = path_info 
+        file_transfer.upload_files_to_sftp(path_info)
+        file_transfer.remove_all_files_from_path(local_path)
+
+
 
 def prepare_select_query(field_config_df):
     source_fields = field_config_df["SOURCE_FIELD"]
@@ -285,11 +294,16 @@ def download(context):
         set_context_param(context)
         get_state_config(state_code)
 
-        # SFTP to ADLS flow customer_id, file_format_config["state"], year, month
-        path_info = file_transfer.download_files_from_sftp(customer_id, file_format_config["state"], year, month)
-        print(path_info)
-        upload_from = file_encr_decr.process_folder_file_decryption(path_info)
-        file_transfer.upload_files_to_blob_storage(upload_from)
+        # SFTP to ADLS flow 
+        if bool(file_format_config["state_has_encryption"]) == True:
+            path_info = file_transfer.download_files_from_sftp(customer_id, file_format_config["state"], year, month)
+            upload_from = file_encr_decr.process_folder_file_decryption(path_info)
+        else:
+            path_info = file_transfer.download_files_from_sftp(customer_id, file_format_config["state"], year, month)
+            download_directory, upload_from = path_info
+
+        file_transfer.upload_files_to_blob_storage(upload_from, bool(file_format_config["state_has_encryption"]))
+
     
     except Exception as e:
         print(e)

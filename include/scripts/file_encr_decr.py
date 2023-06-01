@@ -69,39 +69,6 @@ def file_decrypt(path_encrypted_file, path_decrypted_file, key_private):
     with open(path_decrypted_file, 'wb') as f:
         shutil.copyfileobj(toread, f)
         f.close()
-
-# def get_azure_connection():
-#     container_name =  "cont-datalink-dp-shared"
-#     # create a client to interact with blob storage
-#     blob_details = json.loads(get_kv_secret(KEYVAULT_BLOB_STORAGE_SECRET))
-#     connection_str = blob_details.get('connection_string')
-#     blob_service_client = BlobServiceClient.from_connection_string(connection_str)
-#     account_name = urllib.parse.urlsplit(blob_details.get('host')).hostname.split('.')[0]
-#     # use the client to connect to the container
-#     container_client = blob_service_client.get_container_client(container_name)
-#     sas = connection_str.split('SharedAccessSignature=')[1]
-#     connection = (blob_service_client, container_client, account_name, sas)
-#     return connection
-
-# def download_blob_container(customer_id, state, year, month):
-#     try:
-#         azure_connection = get_azure_connection()
-#         blob_service_client, azure_session, account_name, sas = azure_connection
-
-#         download_directory = f"""OUTPUT/{customer_id}/{state}/{year}/{month}/"""
-
-#         local_download_folder = os.path.join('./adls_download', download_directory)
-#         os.makedirs(local_download_folder, exist_ok=True)
-
-#         blob_list = azure_session.list_blobs(download_directory)
-#         for blob in blob_list:
-#             download_file_path = os.path.join(local_download_folder, os.path.basename(blob.name).split('/')[-1]) 
-#             with open(file=download_file_path, mode="wb") as download_file:
-#                 download_file.write(azure_session.download_blob(blob.name).readall())
-#         path_info = (local_download_folder,download_directory)
-#         return path_info
-#     except Exception as e:
-#             print(e)
     
 def process_folder_files_encryption(inputpath):
     try:
@@ -125,43 +92,27 @@ def process_folder_files_encryption(inputpath):
 
 def process_folder_file_decryption(path_info):
     try:
+        print("******* process_folder_file_decryption start *******")
         # inputpath = "./sftp_download_files"
         # outputpath = "./sftp_decrypted_files"
         local_download_folder, download_directory = path_info
         inputpath = os.path.join('./sftp_download_files', download_directory)
         outputpath = os.path.join('./sftp_decrypted_files', download_directory)
+
         os.makedirs(outputpath, exist_ok=True)
 
         onlyfiles = [f for f in listdir(inputpath) if isfile(join(inputpath, f))]
         for file in onlyfiles:
             file_decrypt(os.path.join(inputpath, file), os.path.join(outputpath, file.replace(".pgp",".txt")), key_private)
 
+        # cleaup download folder   
+        remove_all_files_from_path(inputpath)
+
+        print("******* process_folder_file_decryption end *******")
         return download_directory
     except Exception as e:
         print("Error at process_folder_file_decryption : " + str(e))
 
-# def upload_files_to_blob_storage(upload_directory):
-#     try:
-#         azure_connection = get_azure_connection()
-#         blob_service_client, azure_session, account_name, sas = azure_connection
-
-#         try:
-#             input_upload = os.path.join('./sftp_decrypted_files', upload_directory)
-#             output_folder = os.path.join('./sftp_download_files', upload_directory)
-#             # inputpath = "./sftp_decrypted_files"
-#             onlyfiles = [f for f in listdir(input_upload) if isfile(join(input_upload, f))]
-#             for file in onlyfiles:
-#                 with open(file=os.path.join(input_upload, file), mode="rb") as data:
-#                     azure_session.upload_blob(data=data, name= os.path.join(upload_directory,file),overwrite=True)
-                                
-#             # cleaup decrypted files folder
-#             remove_all_files_from_path(output_folder)
-#             # cleaup download folder   
-#             remove_all_files_from_path(input_upload)
-#         except Exception as e:
-#             print("Error at upload_files_to_blob_storage: " + str(e))
-#     except Exception as e:
-#             print("Connection error: " + str(e))
 
 def remove_all_files_from_path(folder):
     print("***************** remove_all_files_from_path start *****************")
