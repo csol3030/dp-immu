@@ -44,10 +44,10 @@ key_private, _ = pgpy.PGPKey.from_blob(private_key)
 def file_encrypt(path_original_file, path_encrypted_file, key_public):
     # Create a PGP file, compressed with ZIP DEFLATE by default unless otherwise specified
     pgp_file = pgpy.PGPMessage.new(path_original_file, file=True)
-    
+
     # Encrypt the data with the public key
-    encrypted_data = key_public.encrypt(pgp_file) 
-    
+    encrypted_data = key_public.encrypt(pgp_file)
+
     # Write the encryped data to the encrypted destination
     text_file = open(path_encrypted_file, 'w')
     text_file.write(str(encrypted_data))
@@ -56,14 +56,14 @@ def file_encrypt(path_original_file, path_encrypted_file, key_public):
 def file_decrypt(path_encrypted_file, path_decrypted_file, key_private):
     # Load a previously encryped message from a file
     pgp_file = pgpy.PGPMessage.from_file(path_encrypted_file)
-    
+
     # Decrypt the data with the given private key
     decrypted_data = key_private.decrypt(pgp_file).message
 
     # Read in the bytes of the decrypted data
     toread = io.BytesIO()
-    toread.write(bytes(decrypted_data, "utf-8"))  
-    toread.seek(0)  # reset the pointer 
+    toread.write(bytes(decrypted_data, "utf-8"))
+    toread.seek(0)  # reset the pointer
 
     # Write the data to the location
     with open(path_decrypted_file, 'wb') as f:

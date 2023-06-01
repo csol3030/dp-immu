@@ -13,6 +13,7 @@ import ntpath
 import json
 import constant
 
+
 # Snowflake configurations
 DATABASE = "DEV_IMMUNIZATION_DB"
 SCHEMA = "IMMUNIZATION"
@@ -246,8 +247,12 @@ def pattern_matching(azure_session, file_dict, context):
     file_name_pattern = file_dict["file_name_pattern"]
     customer_id = context["params"]["customer_id"]
     root_folder = context["params"]["root_folder"]
+    state = file_dict.get("state")
+    lookup_folder = f"{root_folder}/{str(customer_id)}"
+    if state:
+        lookup_folder+= f"/{state}"
     blob_list = []
-    for blob_i in azure_session.list_blobs(name_starts_with=f"{root_folder}/{str(customer_id)}"):
+    for blob_i in azure_session.list_blobs(name_starts_with=lookup_folder):
         file_name = blob_i.name.lower()
         file_name_pattern = file_name_pattern.lower()
         if fnmatch.fnmatch(file_name, file_dict['file_wild_card_ext'].lower()):
@@ -506,7 +511,9 @@ def process(context):
             try:
                 file_dict = {}
                 file_dict['file_details_id'] = int(df_file_details['FILE_DETAILS_ID'][ind])
-                file_dict['customer_id'] = int(df_file_details['STATE_REG_ID'][ind])
+                file_dict['customer_id'] = int(df_file_details['CUSTOMER_ID'][ind])
+                file_dict['state_reg_id'] = int(df_file_details['STATE_REG_ID'][ind])
+                file_dict['state'] = df_file_details['STATE'][ind]
                 file_dict['file_name_pattern'] = df_file_details['INBOUND_FILE_NAME_PATTERN'][ind]
                 file_dict['file_wild_card_ext'] = df_file_details['FILE_EXTENSION'][ind]
                 file_dict['field_delimiter'] = df_file_details['FIELD_DELIMITER'][ind]
@@ -584,9 +591,9 @@ def handle_blob_list(file_dict, blob_i, file_columns, created, table_columns, co
             snowflake_session, file_dict['file_details_id'],
             blob_i, response, handle_schema_drift, schema_drift_columns,
             file_name, load_timestamp)
-        # if CCD_FILE_EXT not in file_dict['file_wild_card_ext'].upper():
-        #     error_found = update_bronze_to_sliver_details(snowflake_session, file_dict,
-        #                                               file_name, load_timestamp)
+        if CCD_FILE_EXT not in file_dict['file_wild_card_ext'].upper():
+            error_found = update_bronze_to_sliver_details(snowflake_session, file_dict,
+                                                      file_name, load_timestamp)
         # move_blob(azure_connection, blob_i, error_found,  context)
     except Exception as e:
             if load_timestamp:

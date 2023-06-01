@@ -44,8 +44,8 @@ with DAG(
         "customer_id": Param(default=125, type=["integer", "string"], min=1, max=255),
         "container_name": Param(default="cont-datalink-dp-shared", type=["string"]),
         "root_folder": Param(default="INPUT", type=["string"]),
-        "database": Param(default="DEV_OPS_DB", type=["string"]),
-        "schema": Param(default="CONFIG", type=["string"]),
+        "database": Param(default="DEV_IMMUNIZATION_DB", type=["string"]),
+        "schema": Param(default="IMMUNIZATION", type=["string"]),
         "run_failed": Param(default=True),
         "state_code": Param(default="VA", type=["string"])
     },
