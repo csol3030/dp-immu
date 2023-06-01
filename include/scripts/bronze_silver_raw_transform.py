@@ -55,8 +55,8 @@ def get_snowflake_connection(context):
 def insert_into_table(snowflake_session, target_table, source_table, source_columns,
                     target_columns, load_date):
     # Snowflake Insert into statment from a source table
-    target_columns_str = ','.join([col for col in target_columns])
-    source_columns_str = ','.join([col if "$$" not in col else f"'{col.split('$$')[-1]}'"
+    target_columns_str = ','.join([f'"{col}"' for col in target_columns])
+    source_columns_str = ','.join([f'"{col}"' if "$$" not in col else f"'{col.split('$$')[-1]}'"
                                 for col in source_columns])
     insert_into_str = f"""insert into {target_table}({target_columns_str})
                         select {source_columns_str} from {source_table}

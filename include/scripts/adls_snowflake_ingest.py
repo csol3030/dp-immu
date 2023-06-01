@@ -513,7 +513,7 @@ def process(context):
                 file_dict['file_details_id'] = int(df_file_details['FILE_DETAILS_ID'][ind])
                 file_dict['customer_id'] = int(df_file_details['CUSTOMER_ID'][ind])
                 file_dict['state_reg_id'] = int(df_file_details['STATE_REG_ID'][ind])
-                file_dict['state'] = int(df_file_details['STATE'][ind])
+                file_dict['state'] = df_file_details['STATE'][ind]
                 file_dict['file_name_pattern'] = df_file_details['INBOUND_FILE_NAME_PATTERN'][ind]
                 file_dict['file_wild_card_ext'] = df_file_details['FILE_EXTENSION'][ind]
                 file_dict['field_delimiter'] = df_file_details['FIELD_DELIMITER'][ind]
