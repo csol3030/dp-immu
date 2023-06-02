@@ -1,3 +1,4 @@
+from multiprocessing import context
 from snowflake.snowpark import Session
 import snowflake.snowpark.functions as F
 from snowflake.snowpark.types import StructType,StructField,StringType
@@ -91,8 +92,10 @@ def generate_member_df(field_config_df):
     global df_member_list
     df_member_list = session.sql(str_select_column)
     df_member_list.show()
+
     df_member_list = manipulate_and_validate(df_member_list,field_config_df)
     
+    print("Before export file df")
     df_member_list.show()
     export_file(df_member_list, file_format_config)
 
@@ -100,11 +103,15 @@ def generate_member_df(field_config_df):
     # file_encr_decr.process_folder_files_encryption()
 
     # ADLS to sftp flow
+    move_file_to_adls()
+
+def move_file_to_adls():
     print("ADLS to sftp flow started")
     path_info = file_transfer.download_blob_container(customer_id, file_format_config["state"], year, month)
 
     if bool(file_format_config["state_has_encryption"]) == True:
         print('state_has_encryption')
+        # file_encr_decr.get_public_private_key(file_format_config["private_key"],file_format_config["publick_key"])
         folder_encryption = file_encr_decr.process_folder_files_encryption(path_info)
         local_path, upload_path = folder_encryption
         file_transfer.upload_files_to_sftp(folder_encryption)
@@ -114,8 +121,6 @@ def generate_member_df(field_config_df):
         local_path, directory_structure = path_info 
         file_transfer.upload_files_to_sftp(path_info)
         file_transfer.remove_all_files_from_path(local_path)
-
-
 
 def prepare_select_query(field_config_df):
     source_fields = field_config_df["SOURCE_FIELD"]
@@ -172,22 +177,37 @@ def manipulate_and_validate(df,field_config_df):
 
     # Check each field level validations like valid values, default values, dateformat, 
     # Check file level validation missing data, field exclude, 
-    df = check_filed_format(df, field_config_df)
+    df = check_filed_format_validation(df, field_config_df)
     df = check_validate_value(df, field_config_df)
 
     if file_format_config["field_exclude"]:
         df = check_apply_exclude_values(df,source_fields)
 
-    # df= df.with_column_renamed(F.col('MBR_PERSON_ID'), "PERSON ID")
     df = map_col_name(df, source_fields, target_col)
     return df
 
-def check_filed_format(df, field_config_df):
+def check_filed_format_validation(df, field_config_df):
     source_fields = field_config_df["SOURCE_FIELD"]
     enumerate_data = enumerate(source_fields)
     for index, key in enumerate_data:
         df = data_type_format_check(df,field_config_df,index)
+        df = sufifx_check(df,field_config_df,index)
+
     return df
+
+def sufifx_check(df,field_config_df,index):
+    print(" ********** suffix ********** ")
+    if len(field_config_df["SUFFIX"][index]) != 0:
+        suffixes = json.loads(field_config_df["SUFFIX"][index])
+        source_fields = field_config_df["SOURCE_FIELD"]
+        col_name = source_fields[index]
+        if len(suffixes.keys()) > 0:
+            array_suffix = suffixes['suffix_strings']
+            for val in array_suffix:
+                df = remove_suffix(df,True,val,col_name)   
+        return df
+    else:
+        return df
 
 def data_type_format_check(df,field_config_df,index):
         source_fields = field_config_df["SOURCE_FIELD"]
@@ -216,7 +236,13 @@ def update_date_format(df,index,source_fields,data_format):
     df = df.with_column(col, F.sql_expr(f"""to_varchar(try_to_date({col}, 'YYYY-MM-DD'), '{data_format}')"""))
     return df
 
-# def check_validate_value(index,field_config_df):
+def remove_suffix(df,isSuffix,value,col):
+    print("remove_suffix")
+    if isSuffix == True:
+        df = df.with_column(col, F.trim(F.rtrim(col, F.lit(f"""{value}""")))) 
+    else:
+        df = df.with_column(col, F.trim(F.ltrim(col, F.lit(f"""{value}""")))) 
+    return df
     
 
 def check_apply_exclude_values(df,source_fields):
@@ -252,7 +278,6 @@ def remove_value(df1, col, exclude_item):
 
 def check_validate_value(df,field_config_df):
     print("***********************VALIDATION****************************")
-    df.show()
     temp_df = pd.DataFrame.from_dict(field_config_df)
     print(temp_df)
     for i in range(len(temp_df)):
@@ -268,7 +293,6 @@ def update_validated_df(df,source,valid_values,default):
     return df
 
 def set_context_param(context):
-        
         global year, month, customer_id,state_code
         state_code = context['params']['state_code']
         year = context['params']['year']
@@ -277,7 +301,6 @@ def set_context_param(context):
 
 def process(context):
     try:
-
         set_context_param(context)
         state_reg_id = get_state_config(state_code)
         get_filed_config_for_state(state_reg_id)
@@ -290,7 +313,6 @@ def process(context):
 
 def download(context):
     try:
-        
         set_context_param(context)
         get_state_config(state_code)
 
@@ -303,10 +325,14 @@ def download(context):
             download_directory, upload_from = path_info
 
         file_transfer.upload_files_to_blob_storage(upload_from, bool(file_format_config["state_has_encryption"]))
-
     
     except Exception as e:
         print(e)
     finally:
         if session:
             session.close()
+
+# context = {'ds': '2023-06-01', 'ds_nodash': '20230601', 'expanded_ti_count': None, 'inlets': [], 'next_ds': '2023-06-01', 'next_ds_nodash': '20230601', 'outlets': [], 'prev_ds': '2023-06-01', 'prev_ds_nodash': '20230601', 'run_id': 'manual__2023-06-01T16:43:36.717907+00:00', 'task_instance_key_str': 'af_snowflake_to_adls__copy_from_snowflake_adls__20230601', 'test_mode': False, 'tomorrow_ds': '2023-06-02', 'tomorrow_ds_nodash': '20230602', 'ts': '2023-06-01T16:43:36.717907+00:00', 'ts_nodash': '20230601T164336', 'ts_nodash_with_tz': '20230601T164336.717907+0000', 'yesterday_ds': '2023-05-31', 'yesterday_ds_nodash': '20230531', 'params': {'state_code': 'VA', 'year': '2023', 'month': '5', 'customer_id': '125'}, 'templates_dict': None}
+# set_context_param(context)
+# state_reg_id = get_state_config(state_code)
+# get_filed_config_for_state(state_reg_id)
