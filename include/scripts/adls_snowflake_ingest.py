@@ -357,7 +357,7 @@ def get_or_create_target_table(snowflake_session, file_dict, file_columns):
     created = False
     if CCD_FILE_EXT in file_dict['file_wild_card_ext'].upper():
         if not table_columns:
-            snowflake_session.sql(f"create database if not exists {target_db};").collect()
+            # snowflake_session.sql(f"create database if not exists {target_db};").collect()
             snowflake_session.sql(f"create schema if not exists {target_db}.{target_schema};").collect()
             target_table_ntp = f"{target_db}.{target_schema}.{target_table}"
             create_table(snowflake_session, file_columns+['FILE_INGESTION_DETAILS_ID'],
@@ -365,7 +365,7 @@ def get_or_create_target_table(snowflake_session, file_dict, file_columns):
             return (True, file_columns)
     if not table_columns:
         # create database, schema, table if not present
-        snowflake_session.sql(f"create database if not exists {target_db};").collect()
+        # snowflake_session.sql(f"create database if not exists {target_db};").collect()
         snowflake_session.sql(f"create schema if not exists {target_db}.{target_schema};").collect()
         target_table_ntp = f"{target_db}.{target_schema}.{target_table}"
         if not header_row:

@@ -37,7 +37,7 @@ with DAG(
         "database": Param(default="DEV_OPS_DB", type=["string"]),
         "schema": Param(default="CONFIG", type=["string"]),
         "run_failed": Param(default=True)
-    },
+    }
 ) as dag:
 
 
@@ -50,7 +50,7 @@ with DAG(
             "year": """{{params.year}}""",
             "month": """{{params.month}}""",
             "customer_id": """{{params.customer_id}}"""
-        },
+        }
     )
 
     af_adls_to_snowflake = TriggerDagRunOperator(
@@ -65,8 +65,18 @@ with DAG(
             "schema": """{{params.schema}}""",
             "run_failed": """{{params.run_failed}}""",
             "state_code": """{{params.state_code}}""",
-        },
+        }
     )
 
+    af_bronze_to_silver = TriggerDagRunOperator(
+        task_id="af_bronze_to_silver",
+        trigger_dag_id="af_bronze_to_silver",
+        wait_for_completion=True,
+        conf={
+            "database": """{{params.database}}""",
+            "schema": """{{params.schema}}""",
+            "run_failed": """{{params.run_failed}}"""
+        }
+    )
 
-af_sftp_to_adls >> af_adls_to_snowflake
+af_sftp_to_adls >> af_adls_to_snowflake >> af_bronze_to_silver
