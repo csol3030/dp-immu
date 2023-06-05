@@ -1,4 +1,5 @@
 from multiprocessing import context
+from pydoc import stripid
 from snowflake.snowpark import Session
 import snowflake.snowpark.functions as F
 from snowflake.snowpark.types import StructType,StructField,StringType
@@ -53,8 +54,8 @@ def get_state_config(code):
     global file_format_config
     file_format_config = {
         "file_extension": first_object["FILE_EXTENSION"].split('.')[-1],
-        "field_delimiter": first_object["FIELD_DELIMITER"],
-        "is_fixed_length":first_object["FIXED_LENGTH"],
+        "field_delimiter": first_object["FIELD_DELIMITER"] if first_object["FIXED_LENGTH"] == False else 'None',
+        "is_fixed_length": first_object["FIXED_LENGTH"],
         "enclosed_by": first_object["FIELD_ENCLOSE"],
         "max_file_size":  first_object["MAX_SIZE"],
         "input_file_name": first_object["FILE_NAME_FORMAT"],
@@ -292,18 +293,20 @@ def update_validated_df(df,source,valid_values,default):
     df = df.withColumn(source, F.when(F.col(source).isin(valid_list), F.col(source)).otherwise(default))
     return df
 
-def set_context_param(context):
+def set_context_param(context, state):
         global year, month, customer_id,state_code
-        state_code = context['params']['state_code']
+        state_code = state.strip()
         year = context['params']['year']
         month = context['params']['month']
         customer_id = context['params']['customer_id']
 
 def process(context):
     try:
-        set_context_param(context)
-        state_reg_id = get_state_config(state_code)
-        get_filed_config_for_state(state_reg_id)
+        state_codes = context['params']['state_code'].split(",")
+        for state in state_codes:
+            set_context_param(context, state)
+            state_reg_id = get_state_config(state_code)
+            get_filed_config_for_state(state_reg_id)
 
     except Exception as e:
         print(e)
