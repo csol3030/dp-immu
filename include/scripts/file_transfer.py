@@ -1,22 +1,21 @@
 import pysftp
 import os
 import io
-from os import listdir
-from os.path import isfile, join
 import json
 from azure.identity import AzureCliCredential
 from azure.keyvault.secrets import SecretClient
-import shutil
-from datetime import datetime
 
 import json
 import urllib.parse
-from azure.identity import DefaultAzureCredential, AzureCliCredential
-from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
+from azure.identity import AzureCliCredential
+from azure.storage.blob import BlobServiceClient
 from azure.keyvault.secrets import SecretClient
 import constant
+from pysftp import Connection
+import pgpy
+import base64
+from io import StringIO
 
-KEYVAULT_SFTP_SECRET= "SFTPSecret"
 KEYVAULT_BLOB_STORAGE_SECRET = "ADLSBlobConnSTR"
 
 def get_kv_secret(secret_name):
@@ -26,72 +25,9 @@ def get_kv_secret(secret_name):
     fetched_secret = kv_client.get_secret(secret_name)
     return fetched_secret.value
     
-print("get_kv_secret")
-sftp_details = json.loads(get_kv_secret(KEYVAULT_SFTP_SECRET))
-print(sftp_details)
-host=sftp_details['host']
-user_name=sftp_details['username']
-sftp_password=sftp_details['password']
 
 cnopts = pysftp.CnOpts()
 cnopts.hostkeys = None
-
-currentMonth = datetime.now().month
-currentYear = datetime.now().year
-
-def upload_files_to_sftp(pathinfo):
-    try:
-        print("******* upload_files_to_sftp  start *******")
-        inputpath,outputpath = pathinfo
-        # inputpath = "./adsl_encrypted_files/OUTPUT/125/Virginia/2023/5"
-        # outputpath = "/OUTPUT/125/Virginia/2023/5"
-        outputdir=outputpath.split('/')
-        # outputdir=outputdir[1:]
-        onlyfiles = [f for f in listdir(inputpath) if isfile(join(inputpath, f))]
-        directory=''
-        with pysftp.Connection(host, username=user_name, password=sftp_password, cnopts=cnopts) as sftp:
-            for i in outputdir:
-                directory=directory+'/'
-                directory=directory+i
-                if(sftp.lexists(directory)):
-                    pass
-                else:
-                    sftp.mkdir(directory)
-            for file in onlyfiles:
-                ippath=os.path.join(inputpath, file)
-                with sftp.cd(directory):
-                    sftp.put(ippath)
-        sftp.close()
-        print("******* upload_files_to_sftp end *******")
-
-    except Exception as e:
-        print(e)
-
-def download_files_from_sftp(customer_id, state, year, month):
-    try:
-        print("************* download_files_from_sftp started ***************")
-        sftppath=f"""/INPUT/{customer_id}/{state}/{year}/{month}"""
-        # downloadpath='./sftp_download_files'
-
-        download_directory = f"""INPUT/{customer_id}/{state}/{year}/{month}"""
-        local_download_folder = os.path.join('./sftp_download_files', download_directory)
-        os.makedirs(local_download_folder, exist_ok=True)
-        
-        print("local_download_folder : " + local_download_folder)
-        with pysftp.Connection(host, username=user_name, password=sftp_password, cnopts=cnopts) as sftp:
-             inputfiles=sftp.listdir(sftppath)
-             for file in inputfiles:
-                  filepath=sftppath+'/'+file
-                  local_download_folder=local_download_folder+'/'+file
-
-                  with sftp.cd(sftppath):
-                    sftp.get(filepath,local_download_folder)
-        sftp.close()
-        path_info = (local_download_folder, download_directory)
-        print("************ download_files_from_sftp end **************")
-        return path_info
-    except Exception as e:
-         print(e)
 
 def get_azure_connection():
     container_name =  "cont-datalink-dp-shared"
@@ -106,61 +42,82 @@ def get_azure_connection():
     connection = (blob_service_client, container_client, account_name, sas)
     return connection
 
-def download_blob_container(customer_id, state, year, month):
+
+def state_sftp_file_to_adls(vault_key,download_sftp_path,upload_adls_path,encryption_enabled):
     try:
-        print("******** download_blob_container start ********")
+        if encryption_enabled == True:
+            private_key = base64.b64decode(get_kv_secret(vault_key)).decode('ascii')
+            key_private, _ = pgpy.PGPKey.from_blob(private_key)
+
+        azure_connection = get_azure_connection()
+        blob_service_client, azure_session, account_name, sas = azure_connection
+        
+        sftp_details = json.loads(get_kv_secret('SFTPSecret'))
+
+        with Connection(sftp_details['host'], username=sftp_details['username'], password = sftp_details['password'], cnopts=cnopts) as sftp:
+            # read folder from SFTP
+            inputfiles=sftp.listdir(download_sftp_path)
+            for file in inputfiles:
+                filepath=download_sftp_path+'/'+file
+                print(filepath)
+                x = sftp.open(filepath, 'rb').read()
+                toread = io.BytesIO()
+                toread.write(x)
+                toread.seek(0)
+
+                # descrypt file
+                if encryption_enabled == True:
+                    pgp_file = pgpy.PGPMessage().from_blob(toread.read())
+                    decrypted_data = key_private.decrypt(pgp_file).message
+                
+                # upload file to ADLS
+                azure_session.upload_blob(data=(decrypted_data if encryption_enabled == True else toread.read()), name= os.path.join(upload_adls_path,file.replace(".pgp",".txt")),overwrite=True)
+            
+            sftp.close()
+
+    except Exception as e:
+        print(e)
+
+def state_snowflake_export_to_sftp(vault_key,encryption_enabled,adls_download_from,sftp_upload_to):
+    try:
+        # root_folder,customer_id,state,year,month,encryption_enabled,
+        if encryption_enabled == True:
+            public_key = base64.b64decode(get_kv_secret(vault_key)).decode('ascii')
+            key_public, _ = pgpy.PGPKey.from_blob(public_key)
+
         azure_connection = get_azure_connection()
         blob_service_client, azure_session, account_name, sas = azure_connection
 
-        download_directory = f"""OUTPUT/{customer_id}/{state}/{year}/{month}/"""
-
-        local_download_folder = os.path.join('./adls_download', download_directory)
-        os.makedirs(local_download_folder, exist_ok=True)
-
-        blob_list = azure_session.list_blobs(download_directory)
-        for blob in blob_list:
-            download_file_path = os.path.join(local_download_folder, os.path.basename(blob.name).split('/')[-1]) 
-            with open(file=download_file_path, mode="wb") as download_file:
-                download_file.write(azure_session.download_blob(blob.name).readall())
-        print("******** download_blob_container end ********")
-        path_info = (local_download_folder,download_directory)
-        return path_info
-    except Exception as e:
-            print(e)
-
-def upload_files_to_blob_storage(upload_directory, state_has_encryption):
-    try:
-        print("******** upload_files_to_blob_storage start ********")
-        azure_connection = get_azure_connection()
-        blob_service_client, azure_session, account_name, sas = azure_connection
+        sftp_details = json.loads(get_kv_secret('SFTPSecret'))
+        blob_list = azure_session.list_blobs(adls_download_from)
 
         try:
-            input_upload = os.path.join('./sftp_decrypted_files', upload_directory) if state_has_encryption == True else os.path.join('./sftp_download_files', upload_directory)
-            print(str(state_has_encryption) +" ******** upload_files_to_blob_storage from ******** " + input_upload)
-            # inputpath = "./sftp_decrypted_files"
-            onlyfiles = [f for f in listdir(input_upload) if isfile(join(input_upload, f))]
-            for file in onlyfiles:
-                with open(file=os.path.join(input_upload, file), mode="rb") as data:
-                    azure_session.upload_blob(data=data, name= os.path.join(upload_directory,file),overwrite=True)
-                                
-            # cleaup decrypted files folder
-            remove_all_files_from_path(input_upload)
-            print("******** upload_files_to_blob_storage end ********")
-        except Exception as e:
-            print("Error at upload_files_to_blob_storage: " + str(e))
-    except Exception as e:
-            print("Connection error: " + str(e))
+            with Connection(sftp_details['host'], username=sftp_details['username'], password = sftp_details['password'], cnopts=cnopts) as sftp:
+                for blob in blob_list:
+                    blob_client = blob_service_client.get_blob_client(container=blob.container, 
+                                                                blob=blob.name)
+                    # download data into stream
+                    download_stream = blob_client.download_blob()
+                    bytes_data = str(download_stream.readall(), "UTF-8")
 
-def remove_all_files_from_path(folder):
-    print("***************** remove_all_files_from_path start *****************")
-    print(folder)
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-            print("***************** remove_all_files_from_path end *****************")
+                    # file encryption 
+                    if encryption_enabled == True:
+                        print("Encryption start")
+                        pgp_file = pgpy.PGPMessage.new(bytes_data)
+                        encrypted_data = key_public.encrypt(pgp_file) 
+
+                    # write file to SFTP
+                    sftp.makedirs(sftp_upload_to)
+                    file_name=os.path.basename(blob.name).split('/')[-1]
+                    file_path = f"""{sftp_upload_to}/{file_name}.pgp""" if encryption_enabled == True else f"""{sftp_upload_to}/{file_name}""" 
+                    sftp.putfo(StringIO(str(encrypted_data if encryption_enabled == True else bytes_data)), file_path)
+            sftp.close()
         except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))
+            print("SFTP connection: " + str(e))
+ 
+    except Exception as e:
+        print(e)
+
+# state_snowflake_export_to_sftp("VA-IMMUNIZATION-PUBLIC-KEY","OUTPUT",125,"Utah",2023,5, False)
+# download_from = f"""/{root_folder}/{customer_id}/{state}/{year}/{month}"""
+# state_sftp_file_to_adls("VA-IMMUNIZATION-SECRET-KEY","INPUT",125,"Ohio",2023,5, False)

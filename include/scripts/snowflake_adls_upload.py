@@ -8,7 +8,6 @@ from azure.identity import AzureCliCredential
 from azure.keyvault.secrets import SecretClient
 from datetime import datetime
 import pandas as pd
-import file_encr_decr
 import file_transfer
 import constant
 
@@ -44,15 +43,15 @@ def get_snowflake_connection():
 session = get_snowflake_connection()
 
 # file_format_config used to export file config, validation details
-file_format_config = {}
+file_config_dic = {}
 
 def get_state_config(code):
 
     df = session.table(f"{DATABASE}.{SCHEMA}.CONFIG_STATE").filter(F.col("STATE_CODE") == code)
     first_object = df.first()
 
-    global file_format_config
-    file_format_config = {
+    global file_config_dic
+    file_config_dic = {
         "file_extension": first_object["FILE_EXTENSION"].split('.')[-1],
         "field_delimiter": first_object["FIELD_DELIMITER"] if first_object["FIXED_LENGTH"] == False else 'None',
         "is_fixed_length": first_object["FIXED_LENGTH"],
@@ -68,8 +67,8 @@ def get_state_config(code):
         "source_table": first_object["SOURCE_TABLE"],
         "source_schema": first_object["SOURCE_SCHEMA"],
         "state_has_encryption": first_object["HAS_ENCRYPTION"],
-        "private_key": first_object["PUBLIC_KEY_SECRETE"],
-        "publick_key": first_object["PRIVATE_KEY_SECRETE"],
+        "private_key": first_object["PRIVATE_KEY_SECRETE"],
+        "publick_key": first_object["PUBLIC_KEY_SECRETE"],
         "state": first_object["STATE"],
         "state_code": code
     }
@@ -79,63 +78,45 @@ def get_state_config(code):
 
 def get_filed_config_for_state(id):
     df = session.sql(f"select * from CONFIG_STM where state_reg_id = {id} order by SEQUENCE asc")
-    global dict_panda_df
-    dict_panda_df = df.to_pandas().to_dict('list')
-    generate_member_df(dict_panda_df)
-    print(dict_panda_df)
-    # export_file(df_member_list, file_format_config)
-    # SOURCE_FIELD
+    global stm_config_pd
+    stm_config_pd = df.to_pandas().to_dict('list')
 
-def generate_member_df(field_config_df):
+    generate_member_df(stm_config_pd)
 
-    str_select_column = "select " +  prepare_select_query(field_config_df) +  f""" from {file_format_config["source_table"]} where MBR_HOME_STATE_CD = '{file_format_config["state_code"]}'"""
-    print(str_select_column)
+def generate_member_df(stm_config):
+
+    str_select_column = "select " +  prepare_select_query(stm_config) +  f""" from {file_config_dic["source_table"]} where MBR_HOME_STATE_CD = '{file_config_dic["state_code"]}'"""
     global df_member_list
     df_member_list = session.sql(str_select_column)
-    df_member_list.show()
-
-    df_member_list = manipulate_and_validate(df_member_list,field_config_df)
+    # df_member_list.show()
     
-    print("Before export file df")
-    df_member_list.show()
-    export_file(df_member_list, file_format_config)
+    df_member_list = manipulate_and_validate(df_member_list,stm_config)
+    
+    # print("Before export file df")
+    # df_member_list.show()
 
-    # file_encr_decr.download_blob_container()
-    # file_encr_decr.process_folder_files_encryption()
+    export_file(df_member_list, file_config_dic)
+    move_file_to_sftp()
 
-    # ADLS to sftp flow
-    move_file_to_adls()
-
-def move_file_to_adls():
+def move_file_to_sftp():
     print("ADLS to sftp flow started")
-    path_info = file_transfer.download_blob_container(customer_id, file_format_config["state"], year, month)
+    adls_path = f"""OUTPUT/{customer_id}/{file_config_dic["state"]}/{year}/{month}/"""
+    sftp_upload_path = f"""/OUTPUT/{customer_id}/{file_config_dic["state"]}/{year}/{month}/"""
+    file_transfer.state_snowflake_export_to_sftp(file_config_dic["publick_key"],bool(file_config_dic["state_has_encryption"]),adls_path,sftp_upload_path)
 
-    if bool(file_format_config["state_has_encryption"]) == True:
-        print('state_has_encryption')
-        # file_encr_decr.get_public_private_key(file_format_config["private_key"],file_format_config["publick_key"])
-        folder_encryption = file_encr_decr.process_folder_files_encryption(path_info)
-        local_path, upload_path = folder_encryption
-        file_transfer.upload_files_to_sftp(folder_encryption)
-        file_transfer.remove_all_files_from_path(local_path)
-    else:
-        print('Not have state_has_encryption')
-        local_path, directory_structure = path_info 
-        file_transfer.upload_files_to_sftp(path_info)
-        file_transfer.remove_all_files_from_path(local_path)
-
-def prepare_select_query(field_config_df):
-    source_fields = field_config_df["SOURCE_FIELD"]
-    target_col = field_config_df["TARGET_FIELD"]
-    default_values = field_config_df["DEFAULT"]
+def prepare_select_query(stm_config):
+    source_fields = stm_config["SOURCE_FIELD"]
+    target_col = stm_config["TARGET_FIELD"]
+    default_values = stm_config["DEFAULT"]
 
     enumerate_source = enumerate(source_fields)
     arry_field = []
-
     for index, key in enumerate_source:
         if key:
-            arry_field.append(key)
+            arry_field.append(f""" IFNULL({key},'') as {key} """)
         else:
             arry_field.append(f"""'{default_values[index]}' as "{target_col[index]}" """)
+    
     return ",".join(arry_field)
 
 def create_file_format(config_dict):
@@ -172,36 +153,58 @@ def export_file(input_df, config_dict):
                                       file_format_name="input_format", overwrite=True, header=config_dict["is_header"],
                                       single=True)
 
-def manipulate_and_validate(df,field_config_df):
-    source_fields = field_config_df["SOURCE_FIELD"]
-    target_col = field_config_df["TARGET_FIELD"]
+def manipulate_and_validate(df,stm_config):
+    source_fields = stm_config["SOURCE_FIELD"]
+    target_col = stm_config["TARGET_FIELD"]
 
     # Check each field level validations like valid values, default values, dateformat, 
     # Check file level validation missing data, field exclude, 
-    df = check_filed_format_validation(df, field_config_df)
-    df = check_validate_value(df, field_config_df)
+    df = check_filed_format_validation(df, stm_config)
+    df = check_validate_value(df, stm_config)
 
-    if file_format_config["field_exclude"]:
+    if file_config_dic["field_exclude"]:
         df = check_apply_exclude_values(df,source_fields)
 
+    # print(" ********* Before DF col mapped *********")
+    # df.show()
+
     df = map_col_name(df, source_fields, target_col)
+    # print(" ********* DF col mapped *********")
+    new_seq = []
+    for item in target_col:
+        new_seq.append((f'"{str(item)}"'))
+
+    df = df.select(new_seq)
     return df
 
-def check_filed_format_validation(df, field_config_df):
-    source_fields = field_config_df["SOURCE_FIELD"]
+def check_filed_format_validation(df, stm_config):
+    source_fields = stm_config["SOURCE_FIELD"]
     enumerate_data = enumerate(source_fields)
     for index, key in enumerate_data:
-        df = data_type_format_check(df,field_config_df,index)
-        df = sufifx_check(df,field_config_df,index)
+        df = data_type_format_check(df,stm_config,index)
+        df = sufifx_check(df,stm_config,index)
+        df = fix_lenght_files(df,index,stm_config)
 
     return df
 
-def sufifx_check(df,field_config_df,index):
-    print(" ********** suffix ********** ")
-    if len(field_config_df["SUFFIX"][index]) != 0:
-        suffixes = json.loads(field_config_df["SUFFIX"][index])
-        source_fields = field_config_df["SOURCE_FIELD"]
-        col_name = source_fields[index]
+def fix_lenght_files(df,index,stm_config):
+    source_cols = stm_config["SOURCE_FIELD"]
+    target_cols = stm_config["TARGET_FIELD"]
+    col_name = source_cols[index] if len(source_cols[index]) > 0 else target_cols[index]
+    if (file_config_dic["is_fixed_length"]):
+        df = update_df_fixed_lenght_value(df,col_name,index,stm_config)
+    return df
+
+def update_df_fixed_lenght_value(df,col,index,stm_config):
+        return df.with_column(col,(F.rpad(F.col(col), stm_config['MAX_LENGTH'][index], F.lit("*"))))
+
+def sufifx_check(df,stm_config,index):
+    if len(stm_config["SUFFIX"][index]) != 0:
+        suffixes = json.loads(stm_config["SUFFIX"][index])
+        source_fields = stm_config["SOURCE_FIELD"]
+        target_fields = stm_config["TARGET_FIELD"]
+        col_name = source_fields[index] if len(source_fields[index]) > 0 else target_fields[index]
+        print("Column name: " + col_name)
         if len(suffixes.keys()) > 0:
             array_suffix = suffixes['suffix_strings']
             for val in array_suffix:
@@ -210,15 +213,15 @@ def sufifx_check(df,field_config_df,index):
     else:
         return df
 
-def data_type_format_check(df,field_config_df,index):
-        source_fields = field_config_df["SOURCE_FIELD"]
-        data_format = field_config_df["FORMAT"][index]
-        if len(field_config_df["FORMAT"][index]) > 0:
-            if field_config_df["DATA_TYPE"][index] == "datetime":
+def data_type_format_check(df,stm_config,index):
+        source_fields = stm_config["SOURCE_FIELD"]
+        data_format = stm_config["FORMAT"][index]
+        if len(stm_config["FORMAT"][index]) > 0:
+            if stm_config["DATA_TYPE"][index] == "datetime":
                 df = update_date_format(df,index, source_fields,data_format)
-            elif field_config_df["DATA_TYPE"][index] == "integer":
+            elif stm_config["DATA_TYPE"][index] == "integer":
                 df = update_number_format(df,index, source_fields,data_format)
-            elif field_config_df["DATA_TYPE"][index] == "varchar":
+            elif stm_config["DATA_TYPE"][index] == "varchar":
                 df = update_string_format(df,index, source_fields,data_format)
         return df
 
@@ -245,10 +248,9 @@ def remove_suffix(df,isSuffix,value,col):
         df = df.with_column(col, F.trim(F.ltrim(col, F.lit(f"""{value}""")))) 
     return df
     
-
 def check_apply_exclude_values(df,source_fields):
     print("\n ************* check_apply_exclude_values *************\n")
-    ex_json=json.loads(file_format_config["field_exclude"])
+    ex_json=json.loads(file_config_dic["field_exclude"])
     if len(ex_json.keys()) > 0:
         print(len(ex_json.keys()))   
         array_exclude_char = ex_json['ex_string'] 
@@ -266,10 +268,10 @@ def map_col_name(df,source_col, target_col):
     return df
 
 def update_df_col_name(df,key, newkey): 
-     return df.with_column_renamed(F.col(key), newkey)
+     return df.with_column_renamed(F.col(key), f'"{newkey}"')
 
 def update_df_exclude(df1, exclude_item, source_fields):  
-    df1.show() 
+    # df1.show() 
     for col in source_fields:
         df1 = remove_value(df1, col, exclude_item)
     return df1
@@ -277,9 +279,9 @@ def update_df_exclude(df1, exclude_item, source_fields):
 def remove_value(df1, col, exclude_item):
     return df1.with_column(col, (F.regexp_replace(F.col(col), F.lit(f"""{exclude_item}"""), F.lit("")))) 
 
-def check_validate_value(df,field_config_df):
+def check_validate_value(df,stm_config):
     print("***********************VALIDATION****************************")
-    temp_df = pd.DataFrame.from_dict(field_config_df)
+    temp_df = pd.DataFrame.from_dict(stm_config)
     print(temp_df)
     for i in range(len(temp_df)):
         if(temp_df['VALID_VALUES'][i]!=''):
@@ -294,6 +296,8 @@ def update_validated_df(df,source,valid_values,default):
     return df
 
 def set_context_param(context, state):
+        print("context: ")
+        print(context)
         global year, month, customer_id,state_code
         state_code = state.strip()
         year = context['params']['year']
@@ -316,26 +320,27 @@ def process(context):
 
 def download(context):
     try:
-        set_context_param(context)
-        get_state_config(state_code)
+        state_codes = context['params']['state_code'].split(",")
+        for state in state_codes:
+            set_context_param(context, state)
+            get_state_config(state_code)
+            download_sftp_path=f"""/INPUT/{customer_id}/{file_config_dic["state"]}/{year}/{month}"""
 
-        # SFTP to ADLS flow 
-        if bool(file_format_config["state_has_encryption"]) == True:
-            path_info = file_transfer.download_files_from_sftp(customer_id, file_format_config["state"], year, month)
-            upload_from = file_encr_decr.process_folder_file_decryption(path_info)
-        else:
-            path_info = file_transfer.download_files_from_sftp(customer_id, file_format_config["state"], year, month)
-            download_directory, upload_from = path_info
-
-        file_transfer.upload_files_to_blob_storage(upload_from, bool(file_format_config["state_has_encryption"]))
-    
+            file_transfer.state_sftp_file_to_adls(
+                file_config_dic["private_key"],
+                download_sftp_path,
+                download_sftp_path,
+                bool(file_config_dic["state_has_encryption"])
+                )    
     except Exception as e:
         print(e)
     finally:
         if session:
             session.close()
 
-# context = {'ds': '2023-06-01', 'ds_nodash': '20230601', 'expanded_ti_count': None, 'inlets': [], 'next_ds': '2023-06-01', 'next_ds_nodash': '20230601', 'outlets': [], 'prev_ds': '2023-06-01', 'prev_ds_nodash': '20230601', 'run_id': 'manual__2023-06-01T16:43:36.717907+00:00', 'task_instance_key_str': 'af_snowflake_to_adls__copy_from_snowflake_adls__20230601', 'test_mode': False, 'tomorrow_ds': '2023-06-02', 'tomorrow_ds_nodash': '20230602', 'ts': '2023-06-01T16:43:36.717907+00:00', 'ts_nodash': '20230601T164336', 'ts_nodash_with_tz': '20230601T164336.717907+0000', 'yesterday_ds': '2023-05-31', 'yesterday_ds_nodash': '20230531', 'params': {'state_code': 'VA', 'year': '2023', 'month': '5', 'customer_id': '125'}, 'templates_dict': None}
-# set_context_param(context)
-# state_reg_id = get_state_config(state_code)
-# get_filed_config_for_state(state_reg_id)
+# context = {'ds': '2023-06-05', 'ds_nodash': '20230605', 'expanded_ti_count': None, 'inlets': [], 'next_ds': '2023-06-05', 'next_ds_nodash': '20230605', 'outlets': [], 'prev_ds': '2023-06-05', 'prev_ds_nodash': '20230605', 'run_id': 'manual__2023-06-05T08:48:36+00:00', 'task_instance_key_str': 'af_snowflake_to_adls__copy_from_snowflake_adls__20230605', 'test_mode': False, 'tomorrow_ds': '2023-06-06', 'tomorrow_ds_nodash': '20230606', 'ts': '2023-06-05T08:48:36+00:00', 'ts_nodash': '20230605T084836', 'ts_nodash_with_tz': '20230605T084836+0000', 'yesterday_ds': '2023-06-04', 'yesterday_ds_nodash': '20230604', 'params': {'state_code': 'OH', 'year': '2023', 'month': '5', 'customer_id': '125'}, 'templates_dict': None}
+# state_codes = context['params']['state_code'].split(",")
+# for state in state_codes:
+#     set_context_param(context,state)
+#     state_reg_id = get_state_config(state_code)
+#     get_filed_config_for_state(state_reg_id)
