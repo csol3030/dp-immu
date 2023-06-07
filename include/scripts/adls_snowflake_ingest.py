@@ -237,9 +237,9 @@ def format_columns(columns):
         if col in META_DATA_COLUMNS + [LOAD_DATE]:
             continue
         if isinstance(col, (list, tuple)):
-            col_list.append((col[0], re.sub(special_char_set,"_", col[1]).upper()))
+            col_list.append((col[0], re.sub(special_char_set,"_", col[1]).upper().replace('"','')))
         else:
-            col_list.append(re.sub(special_char_set,"_", col).upper())
+            col_list.append(re.sub(special_char_set,"_", col).upper().replace('"',''))
     return col_list
 
 def pattern_matching(azure_session, file_dict, context):
@@ -503,16 +503,17 @@ def process(context):
     print("===============context value==============",context["params"])
     try:
         azure_connection = get_azure_connection(context)
-        df_file_details = get_file_details(snowflake_session,
-                                           context["params"]["customer_id"],
-                                           context["params"]["state_code"])
+        config_filter_dict = {'CUSTOMER_ID': context["params"]["customer_id"]}
+        if context["params"].get("state_code"):
+            config_filter_dict.update({'STATE_CODE': context["params"]["state_code"]})
+        df_file_details = get_table_records(snowflake_session, FILE_DETAILS,
+                        filter_dict=config_filter_dict, group_by=None, order_by=None, limit=None)
         file_dtls_blb_lst = []
         for ind in df_file_details.index:
             try:
                 file_dict = {}
                 file_dict['file_details_id'] = int(df_file_details['FILE_DETAILS_ID'][ind])
                 file_dict['customer_id'] = int(df_file_details['CUSTOMER_ID'][ind])
-                file_dict['state_reg_id'] = int(df_file_details['STATE_REG_ID'][ind])
                 file_dict['state'] = df_file_details['STATE'][ind]
                 file_dict['file_name_pattern'] = df_file_details['INBOUND_FILE_NAME_PATTERN'][ind]
                 file_dict['file_wild_card_ext'] = df_file_details['FILE_EXTENSION'][ind]
@@ -592,8 +593,9 @@ def handle_blob_list(file_dict, blob_i, file_columns, created, table_columns, co
             blob_i, response, handle_schema_drift, schema_drift_columns,
             file_name, load_timestamp)
         if CCD_FILE_EXT not in file_dict['file_wild_card_ext'].upper():
-            error_found = update_bronze_to_sliver_details(snowflake_session, file_dict,
-                                                      file_name, load_timestamp)
+            if file_dict['state']:
+                error_found = update_bronze_to_sliver_details(snowflake_session, file_dict,
+                                                        file_name, load_timestamp)
         # move_blob(azure_connection, blob_i, error_found,  context)
     except Exception as e:
             if load_timestamp:

@@ -47,7 +47,7 @@ with DAG(
         "database": Param(default="DEV_IMMUNIZATION_DB", type=["string"]),
         "schema": Param(default="IMMUNIZATION", type=["string"]),
         "run_failed": Param(default=True),
-        "state_code": Param(default="VA", type=["string"])
+        "state_code": Param(default="", type=["string"])
     },
 ) as dag:
 
