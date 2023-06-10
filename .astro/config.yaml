@@ -1,10 +1,2 @@
 project:
-  name: dp-immunization
-postgres:
-  port: "5434"
-project:
-  name: datalink-dp-immunization
-show_warnings: "true"
-upgrade_message: "true"
-webserver:
-  port: "8050"
+  name: dl__dataplatform_wf
