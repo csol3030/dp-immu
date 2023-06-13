@@ -1,7 +1,4 @@
 .git
 .env
-.DS_Store # macOS specific ignore
-# airflow_settings.yaml
-__pycache__/
+airflow_settings.yaml
 astro
-.vscode
